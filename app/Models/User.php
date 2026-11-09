@@ -17,6 +17,21 @@ class User extends Authenticatable
     /** @use HasFactory<UserFactory> */
     use HasFactory, Notifiable;
 
+    public function isAdmin(): bool
+    {
+        return $this->role === 'admin';
+    }
+
+    public function wishlist()
+    {
+        return $this->belongsToMany(Product::class, 'wishlists')->withTimestamps();
+    }
+
+    public function productReviews()
+    {
+        return $this->hasMany(ProductReview::class);
+    }
+
     /**
      * Get the attributes that should be cast.
      *
