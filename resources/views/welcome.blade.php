@@ -15,14 +15,17 @@
         <nav class="main-nav" aria-label="Main navigation">
             <a href="#deals">Deals</a><a href="#categories">Categories</a><a href="#products">Products</a><a href="#about">About us</a>
         </nav>
-        <form class="header-search" action="/" method="get" role="search">
+        <form class="header-search search-wrap" action="/" method="get" role="search" autocomplete="off">
             @if(request('category'))<input type="hidden" name="category" value="{{ request('category') }}">@endif
             <label class="sr-only" for="search">Search products</label>
             <input id="search" type="search" name="q" value="{{ request('q') }}" placeholder="Find your favourites">
             <button aria-label="Search">⌕</button>
+            <div class="search-suggestions" id="search-suggestions" role="listbox" aria-label="Search suggestions" hidden></div>
         </form>
         <a href="#products" class="basket-link" aria-label="Browse products">♡ <span>Shop</span></a>
+        @auth<a class="account-link" href="{{ route('wishlist.index') }}">Wishlist ({{ auth()->user()->wishlist()->count() }})</a>@if(auth()->user()->isAdmin())<a class="account-link" href="{{ route('admin.dashboard') }}">Admin</a>@endif<form method="post" action="{{ route('logout') }}">@csrf<button class="account-link account-button">Sign out</button></form>@else<a class="account-link" href="{{ route('login') }}">Sign in</a>@endauth
     </header>
+    @if(session('success'))<div class="success-toast">{{ session('success') }} <a href="{{ route('wishlist.index') }}">View wishlist ↗</a></div>@endif
 
     <main id="top">
         <section class="hero" id="deals">
@@ -36,7 +39,7 @@
         @if($deals->isNotEmpty())
         <section class="deals-section section-wrap">
             <div class="section-heading"><div><span class="eyebrow">A LITTLE SOMETHING EXTRA</span><h2>Deals to <em>love.</em></h2></div><a class="text-link" href="#products">Shop all products <span>↗</span></a></div>
-            <div class="deal-grid">@foreach($deals as $deal)<article class="deal-card"><span class="deal-tag">GOOD DEAL</span><div class="image-space deal-image"></div><div><small>{{ $deal->category->name }}</small><h3>{{ $deal->name }}</h3><p>{{ $deal->brand }} · {{ $deal->pack_size }}</p><strong>LKR {{ number_format($deal->price_lkr) }}</strong></div></article>@endforeach</div>
+            <div class="deal-grid">@foreach($deals as $deal)<article class="deal-card"><span class="deal-tag">GOOD DEAL</span><div class="image-space deal-image">@if($deal->image_path)<img src="{{ asset('storage/'.$deal->image_path) }}" alt="{{ $deal->name }}">@else<span class="image-label">IMAGE SPACE</span>@endif</div><div><small>{{ $deal->category->name }}</small><h3>{{ $deal->name }}</h3><p>{{ $deal->brand }} · {{ $deal->pack_size }}</p><strong>LKR {{ number_format($deal->price_lkr) }}</strong></div></article>@endforeach</div>
         </section>
         @else
         <section class="deals-section section-wrap">
@@ -46,13 +49,22 @@
         @endif
 
         <section class="categories-section" id="categories"><div class="section-wrap"><div class="section-heading"><div><span class="eyebrow">A GOOD PLACE TO START</span><h2>Shop by <em>category.</em></h2></div><span class="heading-aside">Aisles full of everyday goodness.</span></div>
-            <div class="category-grid">@foreach($categories as $category)<a class="category-card" href="{{ route('home', ['category' => $category->code]) }}"><div class="image-space category-image"><span class="image-label">IMAGE SPACE</span><span class="category-number">{{ str_pad($loop->iteration, 2, '0', STR_PAD_LEFT) }}</span></div><div class="category-info"><div><h3>{{ $category->name }}</h3><span>{{ $category->products_count }} good things to find</span></div><span class="round-arrow">↗</span></div></a>@endforeach</div>
+            <div class="category-grid">@foreach($categories as $category)<a class="category-card" href="{{ route('home', ['category' => $category->code]) }}#category-{{ $category->code }}"><div class="image-space category-image">@if($category->image_path)<img src="{{ asset('storage/'.$category->image_path) }}" alt="{{ $category->name }}">@else<span class="image-label">IMAGE SPACE</span>@endif<span class="category-number">{{ str_pad($loop->iteration, 2, '0', STR_PAD_LEFT) }}</span></div><div class="category-info"><div><h3>{{ $category->name }}</h3><span>{{ $category->products_count }} good things to find</span></div><span class="round-arrow">↗</span></div></a>@endforeach</div>
         </div></section>
 
-        <section class="products-section section-wrap" id="products"><div class="section-heading"><div><span class="eyebrow">THE EVERYDAY GOOD STUFF</span><h2>Good things, <em>in store.</em></h2></div><span class="heading-aside">{{ $products->total() }} products · Prices in LKR</span></div>
-            <div class="product-toolbar"><div class="filter-pills"><a class="filter-pill {{ !request('category') ? 'active' : '' }}" href="{{ route('home', request()->only('q')) }}">Everything</a>@foreach($categories as $category)<a class="filter-pill {{ request('category') === $category->code ? 'active' : '' }}" href="{{ route('home', array_merge(request()->only('q'), ['category' => $category->code])) }}">{{ $category->name }}</a>@endforeach</div><span class="showing-count">Showing {{ $products->firstItem() ?? 0 }}–{{ $products->lastItem() ?? 0 }} of {{ $products->total() }}</span></div>
-            @if($products->isNotEmpty())<div class="product-grid">@foreach($products as $product)<article class="product-card"><div class="product-image image-space"><span class="image-label">IMAGE SPACE</span><span class="product-category">{{ $product->category->code }}</span></div><div class="product-details"><span class="product-brand">{{ $product->brand }} <i>·</i> {{ $product->pack_size }}</span><h3>{{ $product->name }}</h3><div class="product-buy"><strong>LKR {{ number_format($product->price_lkr) }}</strong><button type="button" class="add-button" aria-label="Add {{ $product->name }} to basket" title="Basket coming soon">+</button></div></div></article>@endforeach</div>
-            <div class="pagination">{{ $products->links() }}</div>
+        <section class="products-section section-wrap" id="products"><div class="section-heading"><div><span class="eyebrow">THE EVERYDAY GOOD STUFF</span><h2>Good things, <em>in store.</em></h2></div><span class="heading-aside">{{ $products->count() }} products · Prices in LKR</span></div>
+            <form class="catalog-filters" action="{{ route('home') }}#products" method="get">
+                @if(request('q'))<input type="hidden" name="q" value="{{ request('q') }}">@endif
+                @if(request('category'))<input type="hidden" name="category" value="{{ request('category') }}">@endif
+                <label class="catalog-filter"><span>Brand</span><select name="brand"><option value="">All brands</option>@foreach($brands as $brand)<option value="{{ $brand }}" @selected(request('brand') === $brand)>{{ $brand }}</option>@endforeach</select></label>
+                <label class="catalog-filter"><span>Min price (LKR)</span><input type="number" min="0" name="min_price" value="{{ request('min_price') }}" placeholder="Any"></label>
+                <label class="catalog-filter"><span>Max price (LKR)</span><input type="number" min="0" name="max_price" value="{{ request('max_price') }}" placeholder="Any"></label>
+                <label class="catalog-filter"><span>Dietary</span><select name="dietary"><option value="">Any preference</option>@foreach($dietaryOptions as $option)<option value="{{ $option }}" @selected(request('dietary') === $option)>{{ $option }}</option>@endforeach</select></label>
+                <button type="submit" class="filter-submit">Apply filters</button>
+                @if(request()->hasAny(['brand', 'min_price', 'max_price', 'dietary']))<a class="filter-reset" href="{{ route('home', array_filter(['q' => request('q'), 'category' => request('category')])) }}#products">Clear</a>@endif
+            </form>
+            <div class="product-toolbar"><div class="filter-pills"><a class="filter-pill {{ !request('category') ? 'active' : '' }}" href="{{ route('home', request()->only('q', 'brand', 'min_price', 'max_price', 'dietary')) }}#products">Everything</a>@foreach($categories as $category)<a class="filter-pill {{ request('category') === $category->code ? 'active' : '' }}" href="{{ route('home', array_merge(request()->only('q', 'brand', 'min_price', 'max_price', 'dietary'), ['category' => $category->code])) }}#category-{{ $category->code }}">{{ $category->name }}</a>@endforeach</div><span class="showing-count">{{ $products->count() }} products</span></div>
+            @if($products->isNotEmpty())@foreach($categories as $category)@php($categoryProducts = $products->where('category_id', $category->id))@if($categoryProducts->isNotEmpty())@php($categoryIsOpen = request('category') === $category->code || request()->hasAny(['q', 'brand', 'min_price', 'max_price', 'dietary']))<section class="category-product-section" id="category-{{ $category->code }}"><button type="button" class="category-toggle" aria-expanded="{{ $categoryIsOpen ? 'true' : 'false' }}" aria-controls="category-products-{{ $category->code }}"><span><small>{{ $category->code }}</small><strong>{{ $category->name }}</strong><em>{{ $categoryProducts->count() }} products</em></span><span class="category-toggle-icon">{{ $categoryIsOpen ? '−' : '+' }}</span></button><div class="product-grid category-products" id="category-products-{{ $category->code }}" @if(!$categoryIsOpen) hidden @endif>@foreach($categoryProducts as $product)<article class="product-card" id="product-{{ $product->id }}"><div class="product-image image-space">@if($product->image_path)<img src="{{ asset('storage/'.$product->image_path) }}" alt="{{ $product->name }}">@else<span class="image-label">IMAGE SPACE</span>@endif<span class="product-category">{{ $product->category->code }}</span></div><div class="product-details"><span class="product-brand">{{ $product->brand }} <i>·</i> {{ $product->pack_size }}</span><h3>{{ $product->name }}</h3>@include('products.reviews', ['product' => $product])<div class="product-buy"><strong>LKR {{ number_format($product->price_lkr) }}</strong>@auth<form method="post" action="{{ route('wishlist.add', $product) }}">@csrf<button type="submit" class="wishlist-button" aria-label="Add {{ $product->name }} to wishlist" title="Add to wishlist">♡</button></form>@else<a class="wishlist-button" href="{{ route('login', ['redirect' => url()->full()]) }}" aria-label="Sign in to save {{ $product->name }} to wishlist" title="Sign in to save">♡</a>@endauth</div></div></article>@endforeach</div></section>@endif @endforeach
             @else<div class="empty-state"><span>✳</span><h3>No products found just yet.</h3><p>Try another search or browse all the good things in store.</p><a href="{{ route('home') }}" class="button button-red">View all products</a></div>@endif
         </section>
 
@@ -60,5 +72,81 @@
     </main>
 
     <footer class="site-footer"><a class="brand footer-brand" href="#top"><span class="brand-mark">F</span><span>food<span class="brand-city">city</span><small>GOOD FOOD. GOOD DAYS.</small></span></a><span class="footer-quote">“The best memories are made around the table.”</span><nav aria-label="Footer navigation"><a href="#deals">Deals</a><a href="#categories">Categories</a><a href="#products">Products</a><a href="#about">About us</a></nav><div class="footer-bottom"><span>© {{ date('Y') }} FoodCity Sri Lanka. Made with a little extra love.</span><a href="#top">Back to top ↑</a></div></footer>
+    <script>
+        const searchInput = document.querySelector('#search');
+        const suggestionBox = document.querySelector('#search-suggestions');
+        let searchTimer;
+
+        searchInput?.addEventListener('input', () => {
+            clearTimeout(searchTimer);
+            const term = searchInput.value.trim();
+            if (term.length < 2) {
+                suggestionBox.hidden = true;
+                suggestionBox.replaceChildren();
+                return;
+            }
+
+            searchTimer = setTimeout(async () => {
+                try {
+                    const response = await fetch(`{{ route('search.suggestions') }}?q=${encodeURIComponent(term)}`, { headers: { Accept: 'application/json' } });
+                    const data = await response.json();
+                    suggestionBox.replaceChildren();
+                    for (const [label, entries] of [['Categories', data.categories], ['Products', data.products]]) {
+                        if (!entries.length) continue;
+                        const heading = document.createElement('div');
+                        heading.className = 'suggestion-heading';
+                        heading.textContent = label;
+                        suggestionBox.append(heading);
+                        for (const entry of entries) {
+                            const link = document.createElement('a');
+                            link.className = 'suggestion-item';
+                            link.href = entry.url;
+                            const name = document.createElement('strong');
+                            name.textContent = entry.name;
+                            link.append(name);
+                            if (entry.category) {
+                                const detail = document.createElement('small');
+                                detail.textContent = `${entry.brand} · ${entry.pack_size} · LKR ${entry.price} · ${entry.category}`;
+                                link.append(detail);
+                            }
+                            suggestionBox.append(link);
+                        }
+                    }
+                    if (!suggestionBox.childElementCount) {
+                        const empty = document.createElement('div');
+                        empty.className = 'suggestion-empty';
+                        empty.textContent = 'No matching categories or products';
+                        suggestionBox.append(empty);
+                    }
+                    suggestionBox.hidden = false;
+                } catch {
+                    suggestionBox.hidden = true;
+                }
+            }, 180);
+        });
+
+        document.addEventListener('click', (event) => {
+            if (!event.target.closest('.search-wrap')) suggestionBox.hidden = true;
+        });
+
+        document.querySelectorAll('.category-toggle').forEach((toggle) => {
+            toggle.addEventListener('click', () => {
+                const expanded = toggle.getAttribute('aria-expanded') === 'true';
+                toggle.setAttribute('aria-expanded', String(!expanded));
+                document.getElementById(toggle.getAttribute('aria-controls')).hidden = expanded;
+                toggle.querySelector('.category-toggle-icon').textContent = expanded ? '+' : '−';
+            });
+        });
+
+        if (location.hash.startsWith('#product-')) {
+            const product = document.querySelector(location.hash);
+            const section = product?.closest('.category-product-section');
+            const toggle = section?.querySelector('.category-toggle');
+            if (toggle) {
+                toggle.setAttribute('aria-expanded', 'true');
+                document.getElementById(toggle.getAttribute('aria-controls')).hidden = false;
+            }
+        }
+    </script>
 </body>
 </html>

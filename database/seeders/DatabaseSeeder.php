@@ -22,7 +22,7 @@ class DatabaseSeeder extends Seeder
                 ['Full Cream Milk Powder', 'Anchor', '400 g', 1300], ['Full Cream Milk Powder', 'Anchor', '1 kg', 3250],
                 ['Fresh Milk', 'Ambewela', '1 L', 500], ['Vanilla Set Yoghurt', 'Newdale', '80 g', 80],
                 ['Drinking Yoghurt', 'Kotmale', '180 ml', 150], ['Cheese Slices', 'Kraft', '200 g', 1150],
-                ['Butter Salted', 'Anchor', '200 g', 950], ['UHT Milk', 'Highland', '1 L', 450],
+                ['Salted Butter', 'Anchor', '200 g', 950], ['UHT Milk', 'Highland', '1 L', 450],
                 ['Chocolate Milk', 'Kotmale', '180 ml', 180], ['Vanilla Ice Cream', 'Elephant House', '1 L', 1200],
             ]],
             ['code' => 'CAT003', 'name' => 'Biscuits, Snacks & Confectionery', 'products' => [
@@ -41,9 +41,17 @@ class DatabaseSeeder extends Seeder
             );
 
             foreach ($categoryData['products'] as [$name, $brand, $packSize, $price]) {
+                $dietaryTags = match ($name) {
+                    'Premium Nadu Rice', 'White Raw Rice', 'Red Dhal', 'White Sugar', 'Coconut Oil', 'Chickpeas', 'Table Salt' => ['Vegetarian', 'Vegan', 'Gluten-free'],
+                    'Wheat Flour', 'Atta Flour' => ['Vegetarian', 'Vegan'],
+                    'Basmati Rice' => ['Vegetarian', 'Vegan', 'Gluten-free'],
+                    'Full Cream Milk Powder', 'Fresh Milk', 'Vanilla Set Yoghurt', 'Drinking Yoghurt', 'Cheese Slices', 'Salted Butter', 'UHT Milk', 'Chocolate Milk', 'Vanilla Ice Cream' => ['Vegetarian', 'Contains dairy'],
+                    default => [],
+                };
+
                 Product::updateOrCreate(
                     ['category_id' => $category->id, 'name' => $name, 'brand' => $brand, 'pack_size' => $packSize],
-                    ['price_lkr' => $price, 'is_deal' => false],
+                    ['price_lkr' => $price, 'dietary_tags' => $dietaryTags, 'is_deal' => false],
                 );
             }
         }
