@@ -3,7 +3,6 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
-use App\Models\Category;
 use App\Models\Product;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -14,14 +13,14 @@ class ProductController extends Controller
 {
     public function index(Request $request): View
     {
-        $products = Product::query()->with('category')->when($request->filled('q'), fn ($query) => $query->where(fn ($s) => $s->where('name', 'like', '%'.$request->q.'%')->orWhere('brand', 'like', '%'.$request->q.'%')->orWhere('sku', 'like', '%'.$request->q.'%')->orWhere('barcode', 'like', '%'.$request->q.'%')))->when($request->filled('category_id'), fn ($q) => $q->where('category_id', $request->integer('category_id')))->when($request->filled('stock'), fn ($q) => $request->stock === 'out' ? $q->where('stock_quantity', 0) : ($request->stock === 'low' ? $q->whereColumn('stock_quantity', '<=', 'minimum_stock') : $q))->latest()->paginate(20)->withQueryString();
+        $products = Product::query()->when($request->filled('q'), fn ($query) => $query->where(fn ($s) => $s->where('name', 'like', '%'.$request->q.'%')->orWhere('brand', 'like', '%'.$request->q.'%')->orWhere('sku', 'like', '%'.$request->q.'%')->orWhere('barcode', 'like', '%'.$request->q.'%')))->when($request->filled('stock'), fn ($q) => $request->stock === 'out' ? $q->where('stock_quantity', 0) : ($request->stock === 'low' ? $q->whereColumn('stock_quantity', '<=', 'minimum_stock') : $q))->latest()->paginate(20)->withQueryString();
 
-        return view('admin.products.index', ['products' => $products, 'categories' => Category::orderBy('name')->get()]);
+        return view('admin.products.index', ['products' => $products]);
     }
 
     public function create(): View
     {
-        return view('admin.products.form', ['product' => new Product(), 'categories' => Category::orderBy('name')->get()]);
+        return view('admin.products.form', ['product' => new Product()]);
     }
 
     public function store(Request $request): RedirectResponse
@@ -37,7 +36,7 @@ class ProductController extends Controller
 
     public function edit(Product $product): View
     {
-        return view('admin.products.form', ['product' => $product, 'categories' => Category::orderBy('name')->get()]);
+        return view('admin.products.form', ['product' => $product]);
     }
 
     public function update(Request $request, Product $product): RedirectResponse
@@ -63,7 +62,7 @@ class ProductController extends Controller
     private function validated(Request $request): array
     {
         $data = $request->validate([
-            'category_id' => ['required', 'exists:categories,id'], 'name' => ['required', 'string', 'max:255'],
+            'name' => ['required', 'string', 'max:255'],
             'description' => ['nullable', 'string'], 'brand' => ['required', 'string', 'max:255'],
             'pack_size' => ['required', 'string', 'max:100'], 'unit' => ['required', 'string', 'max:50'],
             'price_lkr' => ['required', 'integer', 'min:0'], 'cost_price' => ['required', 'integer', 'min:0'],
@@ -76,6 +75,10 @@ class ProductController extends Controller
         $data['is_active'] = $request->boolean('is_active');
         $data['is_deal'] = $request->boolean('is_deal');
         $data['dietary_tags'] = $data['dietary_tags'] ?? [];
+        $data['category_id'] = $request->route('product')?->category_id ?? \App\Models\Category::query()->firstOrCreate(
+            ['code' => 'GENERAL'],
+            ['name' => 'Products'],
+        )->id;
         unset($data['image']);
 
         return $data;

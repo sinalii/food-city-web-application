@@ -15,7 +15,7 @@ class InventoryController extends Controller
     public function index(Request $request): View
     {
         return view('admin.inventory', [
-            'products' => Product::query()->with('category')->when($request->filled('q'), fn ($q) => $q->where('name', 'like', '%'.$request->q.'%')->orWhere('sku', 'like', '%'.$request->q.'%'))->orderBy('stock_quantity')->paginate(25)->withQueryString(),
+            'products' => Product::query()->when($request->filled('q'), fn ($q) => $q->where('name', 'like', '%'.$request->q.'%')->orWhere('sku', 'like', '%'.$request->q.'%'))->orderBy('stock_quantity')->paginate(25)->withQueryString(),
             'movements' => StockMovement::with(['product', 'user'])->latest()->limit(30)->get(),
         ]);
     }

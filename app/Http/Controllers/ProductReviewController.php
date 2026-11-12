@@ -12,7 +12,7 @@ class ProductReviewController extends Controller
     public function store(Request $request, Product $product): RedirectResponse
     {
         abort_if($request->user()->isAdmin(), 403, 'Product reviews are for customer accounts.');
-        abort_unless($product->is_active && $product->category->is_active, 404);
+        abort_unless($product->is_active, 404);
 
         $data = $request->validate([
             'rating' => ['required', 'integer', 'between:1,5'],
@@ -24,7 +24,7 @@ class ProductReviewController extends Controller
             ['rating' => $data['rating'], 'body' => $data['body'] ?? null],
         );
 
-        return redirect()->to(route('home', ['category' => $product->category->code]).'#product-'.$product->id)
+        return redirect()->to(route('home').'#product-'.$product->id)
             ->with('success', 'Your review has been saved.');
     }
 
@@ -34,7 +34,7 @@ class ProductReviewController extends Controller
         $product = $review->product;
         $review->delete();
 
-        return redirect()->to(route('home', ['category' => $product->category->code]).'#product-'.$product->id)
+        return redirect()->to(route('home').'#product-'.$product->id)
             ->with('success', 'Your review has been removed.');
     }
 }

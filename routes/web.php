@@ -1,9 +1,7 @@
 <?php
 
-use App\Models\Category;
 use App\Models\Product;
 use App\Http\Controllers\AuthController;
-use App\Http\Controllers\Admin\CategoryController;
 use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\InventoryController;
 use App\Http\Controllers\Admin\ProductController as AdminProductController;
@@ -22,7 +20,7 @@ Route::middleware(['auth'])->group(function () {
     Route::post('/products/{product}/reviews', [ProductReviewController::class, 'store'])->name('reviews.store');
     Route::delete('/reviews/{review}', [ProductReviewController::class, 'destroy'])->name('reviews.destroy');
     Route::get('/wishlist', function (Request $request) {
-        return view('wishlist', ['products' => $request->user()->wishlist()->with('category')->orderBy('name')->get()]);
+        return view('wishlist', ['products' => $request->user()->wishlist()->orderBy('name')->get()]);
     })->name('wishlist.index');
     Route::post('/wishlist/{product}', function (Request $request, Product $product) {
         $request->user()->wishlist()->syncWithoutDetaching([$product->id]);
@@ -49,10 +47,6 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'admin'])->group(fun
     Route::get('/products/{product}/edit', [AdminProductController::class, 'edit'])->name('products.edit');
     Route::put('/products/{product}', [AdminProductController::class, 'update'])->name('products.update');
     Route::delete('/products/{product}', [AdminProductController::class, 'destroy'])->name('products.destroy');
-    Route::get('/categories', [CategoryController::class, 'index'])->name('categories.index');
-    Route::post('/categories', [CategoryController::class, 'store'])->name('categories.store');
-    Route::put('/categories/{category}', [CategoryController::class, 'update'])->name('categories.update');
-    Route::delete('/categories/{category}', [CategoryController::class, 'destroy'])->name('categories.destroy');
     Route::get('/inventory', [InventoryController::class, 'index'])->name('inventory.index');
     Route::post('/inventory/{product}/adjust', [InventoryController::class, 'adjust'])->name('inventory.adjust');
     Route::get('/transactions', [TransactionController::class, 'index'])->name('transactions.index');
@@ -60,12 +54,10 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'admin'])->group(fun
 });
 
 Route::get('/', function (Request $request) {
-    $categories = Category::query()->where('is_active', true)->withCount(['products' => fn ($query) => $query->where('is_active', true)])->orderBy('sort_order')->get();
-    $productQuery = Product::query()->where('is_active', true)->whereHas('category', fn ($query) => $query->where('is_active', true))
-        ->with(['category:id,name,code', 'reviews.user:id,name'])
+    $productQuery = Product::query()->where('is_active', true)
+        ->with(['reviews.user:id,name'])
         ->withAvg('reviews', 'rating')
         ->withCount('reviews')
-        ->when($request->filled('category'), fn ($query) => $query->whereHas('category', fn ($category) => $category->where('code', $request->string('category'))))
         ->when($request->filled('q'), fn ($query) => $query->where(fn ($search) => $search
             ->where('name', 'like', '%'.$request->string('q').'%')
             ->orWhere('brand', 'like', '%'.$request->string('q').'%')))
@@ -77,46 +69,8 @@ Route::get('/', function (Request $request) {
     $brands = Product::query()->where('is_active', true)->distinct()->orderBy('brand')->pluck('brand');
     $dietaryOptions = Product::query()->whereNotNull('dietary_tags')->pluck('dietary_tags')->flatten()->unique()->sort()->values();
 
-    $deals = Product::query()->with('category:id,name')->where('is_active', true)->where('is_deal', true)->latest()->take(3)->get();
+    $deals = Product::query()->where('is_active', true)->where('is_deal', true)->latest()->take(3)->get();
 
-    return view('welcome', compact('categories', 'products', 'deals', 'brands', 'dietaryOptions'));
+    return view('welcome', compact('products', 'deals', 'brands', 'dietaryOptions'));
 })->name('home');
 
-Route::get('/search/suggestions', function (Request $request) {
-    $term = trim((string) $request->query('q', ''));
-
-    if (mb_strlen($term) < 2) {
-        return response()->json(['categories' => [], 'products' => []]);
-    }
-
-    $categories = Category::query()
-        ->where('name', 'like', '%'.$term.'%')->where('is_active', true)
-        ->orderBy('sort_order')
-        ->limit(4)
-        ->get(['code', 'name']);
-
-    $products = Product::query()
-        ->with('category:id,name,code')
-        ->where('is_active', true)->whereHas('category', fn ($category) => $category->where('is_active', true))
-        ->where(fn ($query) => $query
-            ->where('name', 'like', '%'.$term.'%')
-            ->orWhere('brand', 'like', '%'.$term.'%'))
-        ->orderBy('name')
-        ->limit(6)
-        ->get(['id', 'category_id', 'name', 'brand', 'pack_size', 'price_lkr']);
-
-    return response()->json([
-        'categories' => $categories->map(fn ($category) => [
-            'name' => $category->name,
-            'url' => route('home', ['category' => $category->code]).'#products',
-        ]),
-        'products' => $products->map(fn ($product) => [
-            'name' => $product->name,
-            'brand' => $product->brand,
-            'pack_size' => $product->pack_size,
-            'price' => number_format($product->price_lkr),
-            'category' => $product->category->name,
-            'url' => route('home', ['category' => $product->category->code, 'product' => $product->id]).'#product-'.$product->id,
-        ]),
-    ]);
-})->name('search.suggestions');
